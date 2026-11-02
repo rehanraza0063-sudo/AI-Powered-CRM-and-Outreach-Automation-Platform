@@ -199,3 +199,26 @@ parse_experience("2-4 years of experience")
 
 Tests: `pytest ai/evals/test_experience_parser.py` (40 rules-only phrases plus mock-client AI tests).
 
+
+---
+
+## 8. Token Usage & Hash Cache (AI-20)
+
+File: `ai/usage.py`
+
+- **`UsageTracker`** records prompt and completion token counts and the estimated USD cost of every call, and keeps running totals (`summary()`).
+- **`HashCache`** is a thread-safe in-memory LRU cache keyed by the SHA-256 hash of the prompt input. The key also covers the schema, temperature and model, so the same prompt with different settings never shares an entry.
+- **`CachedGeminiClient`** wraps `GeminiClient` with the same `generate(prompt, schema, temperature)` signature. An identical repeated prompt returns the cached output and reports **0 new tokens** and $0 cost. Failed calls are neither cached nor recorded.
+- **Cost estimate:** default Gemini Flash prices are placeholders. Override them with `GEMINI_INPUT_COST_PER_1M_TOKENS` and `GEMINI_OUTPUT_COST_PER_1M_TOKENS` after checking Google's current pricing.
+- The cache and totals live in process memory only and reset on restart. The module has no database access and makes no API calls of its own.
+
+```python
+from ai.usage import CachedGeminiClient
+
+client = CachedGeminiClient()
+output, usage = client.generate("Generate outreach draft")   # real call, tokens counted
+output, usage = client.generate("Generate outreach draft")   # cache hit, usage is all 0
+client.usage_summary()  # calls, cache_hits, total_tokens, cost_usd, tokens_saved, ...
+```
+
+Tests: `pytest ai/evals/test_usage.py`
